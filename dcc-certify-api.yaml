@@ -1,0 +1,517 @@
+openapi: 3.0.1
+servers:
+  - url: https://api.certify.demo.ubirch.com/
+    description: Endpoint for vaccination centers only - STAGING api server
+  - url: https://api.certify.ubirch.com/
+    description: Endpoint for vaccination centers only - PRODUCTION api server
+  - url: https://api.ru.impfnachweis.info
+    description: Endpoint for medical practitioners with TI access only - STAGING api server
+  - url: https://api-pvs.certify.demo.ubirch.com
+    description: Endpoint for medical practitioners with Gematik Kops simulator access only - requires no client-cert required - STAGING api server
+  - url: https://api.impfnachweis.info
+    description: Endpoint for medical practitioners with TI access only -  PRODUCTION api server   
+info:
+  title: Issuer Service API
+  description: |
+    The issuer service API generates signed
+    [Digital Green Certificate (DGC)](https://github.com/ehn-digital-green-development/ehn-dgc-schema/releases/tag/1.0.0)
+    conforming certificates.
+
+    ```
+    Copyright (C) 2021 IBM Deutschland GmbH
+    Copyright (C) 2021 ubirch GmbH
+
+    Licensed under the Apache License, Version 2.0 (the "License");
+    you may not use this file except in compliance with the License.
+    You may obtain a copy of the License at
+
+    https://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+    ```
+
+  version: 2.2.0
+  license:
+    name: 'Apache License, Version 2.0'
+    url: 'https://www.apache.org/licenses/LICENSE-2.0'
+  contact:
+    name: UBIRCH GmbH
+    url: https://ubirch.com
+    email: support@ubirch.com
+paths:
+  # ===========================================================
+  # Available API endpoints
+  # ===========================================================
+  /api/certify/v2/issue:
+    post:
+      tags:
+        - Certification
+      summary: Issue a vaccination certificate.
+      description: |
+        # Description
+
+        Issue a health certificate based on the provided input according to spec 1.0.0 of the
+        [Digital Green Certificate (DGC)](https://github.com/ehn-digital-green-development/ehn-dgc-schema/releases/tag/1.0.0).
+
+        **Authentication:** clients connecting via Internet (not [SNK](https://www.kbv.de/html/sicheres_netz.php)/[TI](https://www.gematik.de/telematikinfrastruktur/))
+        need an X.509 client certificate and must provide a list of authorized vaccination center `id`'s.
+
+        **Applications:** vaccination center software, patient information systems, integrators
+      parameters:
+        - in: header
+          name: X-Transaction-Id
+          description: |
+            The transaction id that identifies this request. Needs to be
+            a SHA256 of the actual transaction id encoded as hex string.
+          schema:
+            type: string
+            format: hex
+            pattern: "^[A-Za-z0-9]{64}$"
+          example: 56e9926cd68bf5818e176196b324aeca05a2fe7ea10b486876d194898e9ccc22
+#          required: true
+        - in: header
+          name: X-UBIRCH-DCCType
+          description: |
+            The type of signature to be acquired. V - for vaccination certificates, T - for
+            test certificates, and R - for recovery certificates
+          schema:
+            type: string
+            pattern: "^[VTR]$"
+          examples:
+            vaccination:
+              value: V
+              summary: Request a vaccination certificate gsignature.
+            test:
+              value: T
+              summary: Request a test certificate signature.
+            recovery:
+              value: R
+              summary: Request a recovery certificate signature.
+          required: true
+      requestBody:
+        description: >-
+          Digital Green Certificate request information. The value-sets are defined in the
+          [EU eHealthNetwork: Value Sets for Digital Green Certificates. version 1.0](https://ec.europa.eu/health/sites/default/files/ehealth/docs/digital-green-certificates_dt-specifications_en.pdf).
+        content:
+          application/json: #deprecated and required for backwards compatability
+            schema:
+              '$ref': '#/components/schemas/VaccinationCertificateRequest'
+          application/vnd.dgc.v1+json:
+            schema:
+              oneOf:
+                - '$ref': '#/components/schemas/VaccinationCertificateRequest'
+                - '$ref': '#/components/schemas/RecoveryCertificateRequest'
+                - '$ref': '#/components/schemas/TestCertificateRequest'
+          application/vnd.dgc.v1.3+json:
+            schema:
+              oneOf:
+                - '$ref': '#/components/schemas/VaccinationCertificateRequest'
+                - '$ref': '#/components/schemas/RecoveryCertificateRequest'
+                - '$ref': '#/components/schemas/TestCertificateRequest'
+            examples:
+              Vaccination Certification Request:
+                description: |
+                  This is an example for a vaccination certification request.
+                value:
+                  nam:
+                    fn: "Musterfrau-Dießner"
+                    gn: "Erika Dörte"
+                  dob: "1979-04-14"
+                  v:
+                    - id: "IZ28215B"
+                      tg: "840539006"
+                      vp: "1119305005"
+                      mp: "EU/1/20/1528"
+                      ma: "ORG-100001699"
+                      dn: 1
+                      sd: 2
+                      dt: "2021-04-14"
+              Recovery Certification Request:
+                description:  |
+                  This is an example for a vaccination certification request.
+                value:
+                  nam:
+                    fn: "Musterfrau-Dießner"
+                    gn: "Erika Dörte"
+                  dob: "1979-04-14"
+                  r:
+                    - id: "BSNR12345"
+                      tg: "840539006"
+                      fr: "2021-04-21"
+                      df: "2021-05-01"
+                      du: "2021-10-21"
+              Test Certification Request:
+                description: |
+                  This is an example for a test certification request.
+                value:
+                  nam:
+                    fn: "Musterfrau-Dießner"
+                    gn: "Erika Dörte"
+                  dob: "1979-04-14"
+                  t:
+                    - id: "TC12345"
+                      tg: "840539006"
+                      tt: "LP6464-4"
+                      nm: "Roche LightCycler qPCR"
+                      tr: "260415000"
+                      sc: "2021-04-13T14:20:00+00:00"
+                      tc: "Hauptbahnhof Köln"
+
+      responses:
+        '200':
+          description: Certificate response as PDF, encoded or binary token.
+          headers:
+            X-DGC-Id:
+              schema:
+                '$ref': 'DCC.combined-schema.json#/$defs/certificate_id'
+              description: The generated certificate identifier contained in the certificate.
+              example: "01DE/IZ999999X/3B05FC5T96C6HY3YS4FS6H8DD#Z"
+          content:
+            application/cbor+base45:
+              schema:
+                '$ref': '#/components/schemas/CertificateEncoded'
+            application/cbor:
+              schema:
+                '$ref': '#/components/schemas/CertificateBinary'
+            application/pdf:
+              schema:
+                '$ref': '#/components/schemas/CertificationPDF'
+        '400':
+          description: Invalid Request
+          # WIP: define extended error messages if input is wrong
+        '401':
+          description: Authentication Failure (Credential missing)
+        '403':
+          description: Forbidden (Invalid Credentials)
+        '406':
+          description: Incorrect data model
+        '500':
+          description: Internal Server Error
+      security:
+        - AppBearerToken: [ ]
+
+  /api/certify/v2/issue/hash:
+    post:
+      tags:
+        - Certification
+      summary: Sign a CBOR Web Token hash.
+      description: |
+        # Description
+        Verifies and signs the hash of a [CBOR Web Token](https://tools.ietf.org/html/rfc8392) (CWT). This is the
+        actual signature operation of the [ECDSA](https://en.wikipedia.org/wiki/Elliptic_Curve_Digital_Signature_Algorithm)
+        algorithm applied to the pre-hashed data of the CWT. It returns the skeleton of the signed CWT which needs to
+        be filled with the actual payload that was used in the process of creating the signature hash. This endpoint
+        is used for a privacy friendly way to remotely sign certificates.
+
+        **Applications:** secure backend integrators, vaccination web frontend
+      parameters:
+        - in: header
+          name: X-Location-Id
+          description: |
+            The location id for which this certificate signature is acquired. Needs to be
+            a SHA256 of the actual location id encoded as hex string.
+          schema:
+            type: string
+            format: hex
+            pattern: "^[A-Za-z0-9]{64}$"
+          example: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+          required: true
+        - in: header
+          name: X-Transaction-Id
+          description: |
+            The transaction id that identifies this request. Needs to be
+            a SHA256 of the actual transaction id encoded as hex string.
+          schema:
+            type: string
+            format: hex
+            pattern: "^[A-Za-z0-9]{64}$"
+          example: 56e9926cd68bf5818e176196b324aeca05a2fe7ea10b486876d194898e9ccc22
+          required: true
+        - in: header
+          name: X-UBIRCH-DCCType
+          description: |
+            The type of signature to be acquired. V - for vaccination certificates, T - for
+            test certificates, and R - for recovery certificates
+          schema:
+            type: string
+            pattern: "^[VTR]$"
+          examples:
+            vaccination:
+              value: V
+              summary: Request a vaccination certificate gsignature.
+            test:
+              value: T
+              summary: Request a test certificate signature.
+            recovery:
+              value: R
+              summary: Request a recovery certificate signature.
+          required: true
+      requestBody:
+        description: |
+          Base64 encoded SHA256 message digest of the CBOR Web Token prior to the application
+          of the signature algorithm.
+        content:
+          text/plain:
+            schema:
+              type: string
+              format: base64
+            example: "TvQb78AX/5r+5ZkVYYeUW0Rn/4FB8ICt6sSdrwOq0EI="
+      responses:
+        '200':
+          description: A signed incomplete CBOR Web Token.
+          content:
+            application/cbor:
+              schema:
+                type: string
+                format: binary
+              example: "<Signed Incomplete CBOR Web Token>"
+        '400':
+          description: Invalid Request
+        '401':
+          description: Authentication Failure(Credential missing)
+        '403':
+          description: Forbidden(Invalid Credentials)
+        '406':
+          description: Incorrect CBOR Data
+        '500':
+          description: Internal Server Error
+      security:
+        - AppBearerToken: [ ]
+
+components:
+  # ===========================================================
+  # Request and response schema definitions
+  # ===========================================================
+  schemas:
+    CertificateRequestBase:
+      description: >-
+        Common Digital Green Certificate (DGC) request data containing the name and date of birth of the person
+        receiving the certificate.
+      type: object
+      required:
+        - nam
+        - dob
+      properties:
+        nam:
+          title: Person name
+          description: Name of the person which receives the certificate.
+          type: object
+          required:
+            - fn
+          properties:
+            fn:
+              title: Family name
+              description: The family or primary name(s) of the person addressed in the certificate
+              type: string
+              maxLength: 50
+              example: "Musterfrau-Dießner"
+            gn:
+              title: Given name
+              description: The given name(s) of the person addressed in the certificate
+              type: string
+              maxLength: 50
+              example: "Erika Dörte"
+        dob:
+          title: Date of birth
+          description: Date of Birth of the person addressed in the DGC. ISO 8601 date format restricted to range 1900-2099
+          type: string
+          format: date
+          pattern: '(19|20)\d{2}-\d{2}-\d{2}'
+          example: '1979-04-14'
+
+    VaccinationCertificateRequest:
+      allOf:
+        - '$ref': '#/components/schemas/CertificateRequestBase'
+        - type: object
+          description: >-
+            Vaccination certificate request object. The value-sets are defined in the
+            [EU eHealthNetwork: Value Sets for Digital Green Certificates. version 1.0](https://ec.europa.eu/health/sites/default/files/ehealth/docs/digital-green-certificates_dt-specifications_en.pdf).
+          required:
+            - v
+          properties:
+            v:
+              description: Vaccination Certificate Entry
+              type: array
+              items:
+                '$ref': '#/components/schemas/VaccinationEntry'
+              minItems: 1
+              maxItems: 1
+
+    RecoveryCertificateRequest:
+      allOf:
+        - '$ref': '#/components/schemas/CertificateRequestBase'
+        - type: object
+          description: >-
+            Recovery certificate request object. The value-sets are defined in the
+            [EU eHealthNetwork: Value Sets for Digital Green Certificates. version 1.0](https://ec.europa.eu/health/sites/default/files/ehealth/docs/digital-green-certificates_dt-specifications_en.pdf).
+          required:
+            - r
+          properties:
+            r:
+              description: Recovery Certificate Entry
+              type: array
+              items:
+                '$ref': '#/components/schemas/RecoveryEntry'
+              minItems: 1
+              maxItems: 1
+
+    TestCertificateRequest:
+      allOf:
+        - '$ref': '#/components/schemas/CertificateRequestBase'
+        - type: object
+          description: >-
+            Test certificate request object. The value-sets are defined in the
+            [EU eHealthNetwork: Value Sets for Digital Green Certificates. version 1.0](https://ec.europa.eu/health/sites/default/files/ehealth/docs/digital-green-certificates_dt-specifications_en.pdf).
+          required:
+            - t
+          properties:
+            t:
+              description: Test Group
+              type: array
+              items:
+                '$ref': '#/components/schemas/TestEntry'
+              minItems: 1
+              maxItems: 1
+
+    VaccinationEntry:
+      description: Single vaccination data entry.
+      type: object
+      required:
+        - id
+        - tg
+        - vp
+        - mp
+        - ma
+        - dn
+        - sd
+        - dt
+      properties:
+        id:
+          description: >-
+            Identifier of the administering location (i.e. vaccination center ID, BSNR or similar identifer).
+            It will be used in the construction of the DGCI (digitial green certificate identifier).
+            Due to the specification of the DGCI only the use of uppercase letters and numbers 0-9 are allowed.
+          type: string
+          pattern: "^[0-9A-Z]+$"
+        tg:
+          '$ref': 'DCC.combined-schema.json#/$defs/disease-agent-targeted'
+        vp:
+          '$ref': 'DCC.combined-schema.json#/$defs/vaccine-prophylaxis'
+        mp:
+          '$ref': 'DCC.combined-schema.json#/$defs/vaccine-medicinal-product'
+        ma:
+          '$ref': 'DCC.combined-schema.json#/$defs/vaccine-mah-manf'
+        dn:
+          '$ref': 'DCC.combined-schema.json#/$defs/dose_posint'
+        sd:
+          '$ref': 'DCC.combined-schema.json#/$defs/dose_posint'
+        dt:
+          description: ISO 8601 date of the vaccination
+          type: string
+          format: date
+
+    RecoveryEntry:
+      description: Single recovery data entry.
+      type: object
+      required:
+        - id
+        - tg
+        - fr
+        - df
+        - du
+      properties:
+        id:
+          description: >-
+            Identifier of the health professional location (i.e. BSNR or similar identifer).
+            It will be used in the construction of the DGCI (digitial green certificate identifier).
+            Due to the specification of the DGCI only the use of uppercase letters and numbers 0-9 are allowed.
+          type: string
+          pattern: "^[0-9A-Z]+$"
+        tg:
+          '$ref': 'DCC.combined-schema.json#/$defs/disease-agent-targeted'
+        fr:
+          description: First positive test result date as ISO 8601.
+          type: string
+          format: date
+        df:
+          description: Certificate valid from date as ISO 8601.
+          type: string
+          format: date
+        du:
+          description: Certificate valid until date as ISO 8601.
+          type: string
+          format: date
+
+    TestEntry:
+      description: Test Entry
+      required:
+        - id
+        - tg
+        - tt
+        - sc
+        - tr
+        - tc
+      type: object
+      properties:
+        id:
+          description: >-
+            Identifier of the test center location (i.e. postal code or similar identifer).
+            It will be used in the construction of the DGCI (digitial green certificate identifier).
+            Due to the specification of the DGCI only the use of uppercase letters and numbers 0-9 are allowed.
+          type: string
+          pattern: "^[0-9A-Z]+$"
+        tg:
+          '$ref': 'DCC.combined-schema.json#/$defs/disease-agent-targeted'
+        tt:
+          '$ref': 'DCC.combined-schema.json#/$defs/test-type'
+        nm:
+          description: NAA Test Name
+          type: string
+        ma:
+          '$ref': 'DCC.combined-schema.json#/$defs/test-manf'
+        sc:
+          description: Date/Time of Sample Collection
+          type: string
+          format: date-time
+        tr:
+          '$ref': 'DCC.combined-schema.json#/$defs/test-result'
+        tc:
+          description: Test center or laboratory
+          type: string
+          maxLength: 50
+
+    CertificateEncoded:
+      description: >-
+        Base45 encoded and compressed Digital Green Certificate (DGC) according to EU specification. An encoded
+        certificate can be directly rendered as a QR code according to the EU specification.
+      type: string
+      format: base45
+      example: "HC1:6BFOXN*TS0BI$ZD4N9:9S6RCVN5+O30K3/XIV0W23NTDEMWK4MI6UOS03CR83KLBKAVN74.CL91/8K6%KEG3983NS9SVBHABVCNN95SWMPHQUHQN%A400H%UBT16Y51Y9AT1:+P6YBKD0:XB7NGJQOIS7I$H%T5+XO8YJMVHBZJF 9NSG:PICIG%*47%S%*48YIZ73423ZQT-EJDG3XW44$22CLY.IE.KD+2H0D3ZCU7JI$2K3JQH5-Y3$PA$HSCHBI I7995R5ZFQETU 9R*PP:+P*.1D9RYO05QD/8D3FC:XIBEIVG395EP1E+WEDJL8FF3DE0OA0D9E2LBHHNHL$EQ+-CVYCMBB:AV5AL5:4A93MOJLWT.C3FDA.-B97U: KMZNKASADIMKN2GFLF9$HF.3O.X21FDLW4L4OVIOE1M24OR:FTNP8EFVMP9/HWKP/HLIJL8JF8JF172OTTHO9YW2E6LS7WGYNDDSHRSFXT*LMK8P*G8QWD8%P%5GPPMEVMTHDBESW2L.TN8BBBDR9+JLDR/1JGIF8BS0IKT8LB1T7WLA:FI%JI50H:EK1"
+
+    CertificateBinary:
+      description: >-
+        Binary representation of the Digital Green Certificate (DGC) according to EU specification.
+        This is a pure CBOR Web Token (CWT) without compression and encoding and HC1: prefix.
+      type: string
+      format: binary
+      example: "<CBOR Web Token>"
+
+    CertificationPDF:
+      description: >-
+        A rendered PDF document containing the certificate information including a
+        Digital Green Certificate (DGC) QR Code according to EU specification.
+      type: string
+      format: binary
+      example: "<PDF>"
+
+  securitySchemes:
+    AppBearerToken:
+      type: http
+      description: >-
+        Authentication is based on a bearer token
+      scheme: bearer
+      bearerFormat: JWT
